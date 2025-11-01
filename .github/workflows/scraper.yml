@@ -1,0 +1,35 @@
+name: eBay Tech Deals Scraper
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'     # run every 3 hours
+  workflow_dispatch:           # allow manual run
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+          pip install selenium
+
+      - name: Run scraper
+        run: python scraper.py
+
+      - name: Commit and push CSV
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add ebay_tech_deals.csv
+          git commit -m "Auto-update eBay Tech Deals" || echo "No new data"
+          git push
