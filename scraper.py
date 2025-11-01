@@ -3,6 +3,7 @@ scraper.py
 -----------
 Scrapes eBay Global Tech Deals using Selenium,
 extracts product info, and saves results to ebay_tech_deals.csv.
+Compatible with both local and GitHub Actions environments.
 """
 
 import csv
@@ -11,28 +12,36 @@ import os
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from webdriver_manager.chrome import ChromeDriverManager
 
 URL = "https://www.ebay.com/globaldeals/tech"
 CSV_FILE = "ebay_tech_deals.csv"
 
 
 def fetch_driver():
-    """Create and return a configured headless Chrome driver."""
+    """Create and return a configured headless Chrome driver (Linux/Windows compatible)."""
     chrome_opts = Options()
     chrome_opts.add_argument("--headless=new")
     chrome_opts.add_argument("--no-sandbox")
-    chrome_opts.add_argument("--disable-gpu")
     chrome_opts.add_argument("--disable-dev-shm-usage")
+    chrome_opts.add_argument("--disable-gpu")
+    chrome_opts.add_argument("--disable-software-rasterizer")
+    chrome_opts.add_argument("--remote-debugging-port=9222")
     chrome_opts.add_argument("--window-size=1920,1080")
-    chrome_opts.binary_location = "/usr/bin/chromium-browser"
-    return webdriver.Chrome(options=chrome_opts)
+    chrome_opts.add_argument("--disable-extensions")
+    chrome_opts.add_argument("--start-maximized")
+
+    # ✅ Automatically install and use the correct ChromeDriver version
+    service = Service(ChromeDriverManager().install())
+    return webdriver.Chrome(service=service, options=chrome_opts)
 
 
 def scroll_to_bottom(driver, pause=2):
-    """Scrolls down until no new content loads."""
+    """Scrolls down until all lazy-loaded items appear."""
     last_height = driver.execute_script("return document.body.scrollHeight")
     while True:
         driver.find_element(By.TAG_NAME, "body").send_keys(Keys.END)
@@ -44,7 +53,7 @@ def scroll_to_bottom(driver, pause=2):
 
 
 def extract_products(driver):
-    """Extract all product cards from the page."""
+    """Extract all product listings from the main page."""
     cards = driver.find_elements(By.CSS_SELECTOR, "div.dne-itemtile")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     all_data = []
@@ -76,6 +85,7 @@ def get_shipping(link):
         d = fetch_driver()
         d.get(link)
         time.sleep(2)
+
         try:
             shipping_elem = d.find_element(
                 By.XPATH,
@@ -90,7 +100,7 @@ def get_shipping(link):
 
         d.quit()
         return txt
-    except:
+    except Exception:
         try:
             d.quit()
         except:
@@ -99,7 +109,7 @@ def get_shipping(link):
 
 
 def save_to_csv(data):
-    """Save or append to CSV."""
+    """Save or append to CSV file."""
     header = ["timestamp", "title", "price", "original_price", "shipping", "item_url"]
     exists = os.path.isfile(CSV_FILE)
     with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
@@ -110,6 +120,7 @@ def save_to_csv(data):
 
 
 def main():
+    print("🚀 Starting eBay Tech Deals scraper...")
     driver = fetch_driver()
     driver.get(URL)
     time.sleep(5)
@@ -117,6 +128,7 @@ def main():
     products = extract_products(driver)
     driver.quit()
 
+    print(f"🔍 Found {len(products)} products. Fetching shipping info...")
     with ThreadPoolExecutor(max_workers=6) as ex:
         futures = {ex.submit(get_shipping, p["item_url"]): p for p in products}
         for fut in as_completed(futures):
@@ -124,7 +136,7 @@ def main():
             prod["shipping"] = fut.result() or "Shipping info unavailable"
 
     save_to_csv(products)
-    print(f"✅ Scraped {len(products)} products successfully.")
+    print(f"✅ Scraped {len(products)} products successfully. Data saved to {CSV_FILE}.")
 
 
 if __name__ == "__main__":
