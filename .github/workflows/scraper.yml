@@ -21,7 +21,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y chromium-browser
-          pip install selenium
+          pip install selenium webdriver-manager
 
       - name: Run scraper
         run: python scraper.py
@@ -33,3 +33,4 @@ jobs:
           git add ebay_tech_deals.csv
           git commit -m "Auto-update eBay Tech Deals" || echo "No new data"
           git push
+
